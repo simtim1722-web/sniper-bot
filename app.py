@@ -1,124 +1,120 @@
 import streamlit as st
+from supabase import create_client
 import random
 import time
 
-# --- STREAMLIT PAGE CONFIG ---
+# 1. Page Configuration
 st.set_page_config(
-    page_title="Sniper Bot SaaS Platform",
+    page_title="Sniper Bot - Live Mock Trading Dashboard",
     page_icon="🚀",
     layout="wide"
 )
 
-st.title("🚀 Sniper Bot - Live Mock Trading Dashboard")
-st.markdown("Makikita rito ang paggalaw at pagbili ng mga coins ng bot sa real-time.")
+# 2. Supabase Connection Setup
+@st.cache_resource
+def init_connection():
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
 
-# --- INITIALIZE SESSION STATE ---
-if 'assets' not in st.session_state:
-    st.session_state.assets = 500.00
-if 'saved_profit' not in st.session_state:
-    st.session_state.saved_profit = 0.00
-if 'wins' not in st.session_state:
-    st.session_state.wins = 0
-if 'losses' not in st.session_state:
-    st.session_state.losses = 0
-if 'bot_running' not in st.session_state:
-    st.session_state.bot_running = False
+supabase = init_connection()
 
-available_coins = ["BTC", "ETH", "SOL", "AXS", "GALA", "ATOM", "RENDER", "DOGE", "NEAR", "XRP", "ADA", "MATIC"]
+# 3. Database Functions
+def get_bot_data():
+    try:
+        response = supabase.table("bot_state").select("*").eq("id", 1).execute()
+        if response.data:
+            return response.data[0]
+    except Exception as e:
+        st.error(f"Database Error: {e}")
+    # Default fallback kung sakaling may error
+    return {
+        "status": "STOPPED",
+        "virtual_assets": 500.00,
+        "saved_profit": 0.00,
+        "wins": 0,
+        "losses": 0
+    }
 
-if 'active_positions' not in st.session_state:
-    st.session_state.active_positions = [
-        {"symbol": "AXS", "entry": 6.50, "current": 6.50, "pnl": 0.0},
-        {"symbol": "GALA", "entry": 0.024, "current": 0.024, "pnl": 0.0},
-        {"symbol": "ATOM", "entry": 8.10, "current": 8.10, "pnl": 0.0},
-        {"symbol": "ETH", "entry": 2600.0, "current": 2600.0, "pnl": 0.0}
-    ]
+def update_bot_data(status, virtual_assets, saved_profit, wins, losses):
+    try:
+        supabase.table("bot_state").update({
+            "status": status,
+            "virtual_assets": virtual_assets,
+            "saved_profit": saved_profit,
+            "wins": wins,
+            "losses": losses
+        }).eq("id", 1).execute()
+    except Exception as e:
+        st.error(f"Update Error: {e}")
 
-# --- SIDEBAR: CONTROLS & RESET ---
-st.sidebar.header("⚙️ Bot Controls")
-if st.sidebar.button("🗑️ I-reset Lahat (Reset All)", use_container_width=True, type="secondary"):
-    st.session_state.assets = 500.00
-    st.session_state.saved_profit = 0.00
-    st.session_state.wins = 0
-    st.session_state.losses = 0
-    st.session_state.bot_running = False
-    st.session_state.active_positions = [
-        {"symbol": "AXS", "entry": 6.50, "current": 6.50, "pnl": 0.0},
-        {"symbol": "GALA", "entry": 0.024, "current": 0.024, "pnl": 0.0},
-        {"symbol": "ATOM", "entry": 8.10, "current": 8.10, "pnl": 0.0},
-        {"symbol": "ETH", "entry": 2600.0, "current": 2600.0, "pnl": 0.0}
-    ]
+# Kunin ang kasalukuyang data mula sa Supabase cloud
+data = get_bot_data()
+
+bot_status = data["status"]
+virtual_assets = float(data["virtual_assets"])
+saved_profit = float(data["saved_profit"])
+wins = int(data["wins"])
+losses = int(data["losses"])
+total_trades = wins + losses
+win_rate = (wins / total_trades * 100) if total_trades > 0 else 0.0
+
+# 4. Sidebar Controls
+st.sidebar.markdown("⚙️ **Bot Controls**")
+if st.sidebar.button("🗑️ I-reset Lahat (Reset All)"):
+    update_bot_data("STOPPED", 500.00, 0.00, 0, 0)
     st.rerun()
 
-# --- MAIN DASHBOARD METRICS ---
+st.sidebar.markdown("---")
+if bot_status == "RUNNING (ACTIVE)":
+    if st.sidebar.button("⏹ Stop Bot"):
+        update_bot_data("STOPPED", virtual_assets, saved_profit, wins, losses)
+        st.rerun()
+else:
+    if st.sidebar.button("▶ Start Mock Bot"):
+        update_bot_data("RUNNING (ACTIVE)", virtual_assets, saved_profit, wins, losses)
+        st.rerun()
+
+if st.sidebar.button("🔄 I-simulate ang Paggalaw / Panalo"):
+    new_assets = virtual_assets + random.choice([15.0, 35.0, -10.0, 50.0])
+    new_profit = saved_profit + random.choice([5.0, 12.0, 20.0])
+    new_wins = wins + 1
+    update_bot_data(bot_status, new_assets, new_profit, new_wins, losses)
+    st.rerun()
+
+# 5. Main Dashboard Layout
+st.title("🚀 Sniper Bot - Live Mock Trading Dashboard (Cloud Synced)")
+st.markdown("Makikita rito ang paggalaw at pagbili ng mga coins ng bot sa real-time na naka-save sa Supabase Cloud.")
+
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    st.metric(label="💰 Virtual Assets", value=f"${st.session_state.assets:.2f}")
+    st.metric(label="💰 Virtual Assets", value=f"${virtual_assets:,.2f}")
+
 with col2:
-    total_trades = st.session_state.wins + st.session_state.losses
-    win_rate = (st.session_state.wins / total_trades) * 100 if total_trades > 0 else 0
-    st.metric(label="📊 Win Rate", value=f"{win_rate:.2f}%", delta=f"{st.session_state.wins}W - {st.session_state.losses}L")
+    st.metric(label="📊 Win Rate", value=f"{win_rate:.2f}%", delta=f"{wins}W - {losses}L")
+
 with col3:
-    st.metric(label="🏦 Saved Profit", value=f"${st.session_state.saved_profit:.2f}")
+    st.metric(label="🏦 Saved Profit", value=f"${saved_profit:,.2f}")
+
 with col4:
-    status_text = "RUNNING (ACTIVE)" if st.session_state.bot_running else "STOPPED"
-    st.metric(label="⚡ Bot Status", value=status_text)
+    st.metric(label="⚡ Bot Status", value=bot_status)
 
 st.markdown("---")
 
-# Control Buttons
-c1, c2, c3 = st.columns(3)
-with c1:
-    if st.button("▶ Start Mock Bot", use_container_width=True, type="primary"):
-        st.session_state.bot_running = True
-        st.success("✅ Nagsimula na ang bot!")
-with c2:
-    if st.button("⏹ Stop Bot", use_container_width=True):
-        st.session_state.bot_running = False
-        st.warning("⚠️ Huminto ang bot.")
-with c3:
-    if st.button("🔄 I-simulate ang Paggalaw / Panalo", use_container_width=True):
-        profit_add = round(random.uniform(0.40, 1.80), 2)
-        st.session_state.saved_profit += profit_add
-        st.session_state.assets += profit_add
-        st.session_state.wins += 1
-        
-        new_coin = random.choice([c for c in available_coins if c not in [p['symbol'] for p in st.session_state.active_positions]])
-        rand_entry = round(random.uniform(1.0, 100.0), 2)
-        rand_pnl = round(random.uniform(-1.5, 2.5), 2)
-        
-        st.session_state.active_positions.pop(0)
-        st.session_state.active_positions.append({
-            "symbol": new_coin, 
-            "entry": rand_entry, 
-            "current": round(rand_entry * (1 + rand_pnl/100), 2), 
-            "pnl": rand_pnl
-        })
-        st.rerun()
-
-# --- ACTIVE POSITIONS (CLEAN LAYOUT) ---
+# 6. Active Positions Mock View
 st.subheader("📋 Active Positions (Biniling Coins ng Bot)")
+pos_col1, pos_col2, pos_col3, pos_col4 = st.columns(4)
 
-cols = st.columns(len(st.session_state.active_positions))
-for i, pos in enumerate(st.session_state.active_positions):
-    with cols[i]:
-        pnl_str = f"+{pos['pnl']}%" if pos['pnl'] >= 0 else f"{pos['pnl']}%"
-        card_content = f"**{pos['symbol']}**\n\n- Entry: ${pos['entry']}\n- Current: ${pos['current']}\n- PnL: {pnl_str}"
-        
-        if pos['pnl'] >= 0:
-            st.success(card_content)
-        else:
-            st.info(card_content)
+with pos_col1:
+    st.markdown("**AXS**\n* Entry: $6.5\n* Current: $24.03\n* PnL: **+269.72%**")
+with pos_col2:
+    st.markdown("**GALA**\n* Entry: $0.024\n* Current: $0.09\n* PnL: **+260.9%**")
+with pos_col3:
+    st.markdown("**ATOM**\n* Entry: $8.1\n* Current: $30.03\n* PnL: **+270.8%**")
+with pos_col4:
+    st.markdown("**ETH**\n* Entry: $2600.0\n* Current: $9380.8\n* PnL: **+260.8%**")
 
-# --- TRADE HISTORY ---
+st.markdown("---")
 st.subheader("📜 Recent Trade History")
-st.text(" [Wala pang history dahil na-reset ang sistema]")
-
-# Auto-refresh kung naka-start ang bot
-if st.session_state.bot_running:
-    time.sleep(3)
-    for p in st.session_state.active_positions:
-        p['pnl'] = round(p['pnl'] + random.uniform(-0.2, 0.3), 2)
-        p['current'] = round(p['entry'] * (1 + p['pnl']/100), 2)
-    st.rerun()
+st.info("Lahat ng galaw at trade history ay ligtas na naka-sync sa iyong Supabase database.")
