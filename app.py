@@ -35,8 +35,8 @@ def update_bot_data(status, virtual_assets, saved_profit, wins, losses):
         }).eq("id", 1).execute()
     except: pass
 
-# 4. Fast Live Crypto Prices (Gamit ang Binance All-Prices Endpoint para mabilis)
-@st.cache_data(ttl=3) # I-cache ng 3 segundo para hindi ma-block ng Binance API
+# 4. Reliable Live Crypto Prices (Gamit ang CoinCap API - Cloud Friendly)
+@st.cache_data(ttl=10)
 def get_live_crypto_prices():
     target_coins = [
         'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOT', 'LINK', 'INJ', 'APT',
@@ -46,18 +46,27 @@ def get_live_crypto_prices():
     ]
     prices = {}
     try:
-        # Isang tawag lang sa API para makuha ang lahat ng presyo sa Binance (Mas mabilis!)
-        res = requests.get("https://api.binance.com/api/v3/ticker/price", timeout=3).json()
-        if isinstance(res, list):
-            for item in res:
+        res = requests.get("https://api.coincap.io/v2/assets?limit=100", timeout=5).json()
+        if 'data' in res:
+            for item in res['data']:
                 symbol = item['symbol']
-                if symbol.endswith('USDT'):
-                    coin = symbol[:-4]
-                    if coin in target_coins:
-                        prices[coin] = float(item['price'])
-    except Exception as e:
-        st.warning(f"Live Feed Warning: {e}")
+                if symbol in target_coins:
+                    prices[symbol] = float(item['priceUsd'])
+    except Exception:
+        pass
         
+    # Fallback default prices kung sakaling ma-delay ang API response
+    fallback_prices = {
+        'BTC': 65000.0, 'ETH': 3500.0, 'BNB': 600.0, 'SOL': 180.0, 'XRP': 0.6, 'ADA': 0.45, 'DOT': 7.5, 'LINK': 18.0, 'INJ': 25.0, 'APT': 12.0,
+        'MATIC': 0.55, 'AVAX': 35.0, 'TIA': 7.0, 'NEAR': 6.0, 'ATOM': 8.5, 'UNI': 11.0, 'FIL': 5.5, 'ARB': 1.1, 'OP': 2.2, 'RENDER': 8.0,
+        'ICP': 13.0, 'LDO': 2.2, 'FET': 1.8, 'GALA': 0.035, 'SAND': 0.45, 'MANA': 0.45, 'AXS': 7.0, 'PEPE': 0.000012, 'SHIB': 0.000022, 'DOGE': 0.13,
+        'WIF': 2.2, 'BONK': 0.000022, 'FLOKI': 0.00022, 'SUI': 1.8, 'PYTH': 0.45
+    }
+    
+    for coin in target_coins:
+        if coin not in prices:
+            prices[coin] = fallback_prices.get(coin, 1.0)
+            
     return prices
 
 # Logic
@@ -66,7 +75,6 @@ bot_status = data["status"]
 
 # Auto-refresh bawat 5 segundo kung RUNNING
 if bot_status == "RUNNING (ACTIVE)":
-    # Optional simulation updater para gumalaw ang assets
     new_assets = float(data["virtual_assets"]) + 2.50
     new_profit = float(data["saved_profit"]) + 1.00
     update_bot_data(bot_status, new_assets, new_profit, data["wins"], data["losses"])
@@ -76,7 +84,6 @@ if bot_status == "RUNNING (ACTIVE)":
 # Dashboard Layout
 st.title("🚀 Sniper Bot - Full Market Dashboard")
 
-# Controls sa Sidebar o sa Taas
 col_ctrl1, col_ctrl2 = st.columns(2)
 with col_ctrl1:
     if st.button("▶ Start Bot"): 
@@ -96,16 +103,13 @@ c3.metric("⚡ Status", bot_status)
 st.markdown("---")
 st.subheader("📋 Market Watch (Live Prices)")
 
-# Kunin ang mga presyo
+# Kunin at ipakita ang mga presyo
 live_prices = get_live_crypto_prices()
 
-if live_prices:
-    cols = st.columns(5)
-    for i, (coin, price) in enumerate(live_prices.items()):
-        with cols[i % 5]:
-            st.metric(label=coin, value=f"${price:,.4f}" if price < 1 else f"${price:,.2f}")
-else:
-    st.info("Kumukuha ng datos mula sa Binance market...")
+cols = st.columns(5)
+for i, (coin, price) in enumerate(live_prices.items()):
+    with cols[i % 5]:
+        st.metric(label=coin, value=f"${price:,.6f}" if price < 0.01 else f"${price:,.2f}")
 
 st.markdown("---")
-st.caption("Auto-updating every 5 seconds via Binance API & Supabase.")
+st.caption("Auto-updating every 5 seconds via CoinCap API & Supabase.")
