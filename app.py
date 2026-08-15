@@ -1,11 +1,11 @@
 import streamlit as st
 from supabase import create_client
 import random
-import time
+from streamlit_autorefresh import st_autorefresh
 
 # 1. Page Configuration
 st.set_page_config(
-    page_title="Sniper Bot - Live Mock Trading Dashboard",
+    page_title="Sniper Bot - Live Mock Trading Dashboard (Cloud Synced)",
     page_icon="🚀",
     layout="wide"
 )
@@ -27,7 +27,6 @@ def get_bot_data():
             return response.data[0]
     except Exception as e:
         st.error(f"Database Error: {e}")
-    # Default fallback kung sakaling may error
     return {
         "status": "STOPPED",
         "virtual_assets": 500.00,
@@ -48,9 +47,8 @@ def update_bot_data(status, virtual_assets, saved_profit, wins, losses):
     except Exception as e:
         st.error(f"Update Error: {e}")
 
-# Kunin ang kasalukuyang data mula sa Supabase cloud
+# Kunin ang data mula sa cloud
 data = get_bot_data()
-
 bot_status = data["status"]
 virtual_assets = float(data["virtual_assets"])
 saved_profit = float(data["saved_profit"])
@@ -59,7 +57,18 @@ losses = int(data["losses"])
 total_trades = wins + losses
 win_rate = (wins / total_trades * 100) if total_trades > 0 else 0.0
 
-# 4. Sidebar Controls
+# 4. Auto-Refresh Logic (Magre-refresh bawat 5 segundo KUNG ang bot ay RUNNING)
+if bot_status == "RUNNING (ACTIVE)":
+    # Awtomatikong i-simulate ang trade bawat refresh para umandar ang mga numero
+    new_assets = virtual_assets + random.choice([5.0, 12.0, -3.0, 15.0])
+    new_profit = saved_profit + random.choice([2.0, 5.0, 8.0])
+    new_wins = wins + 1
+    update_bot_data(bot_status, new_assets, new_profit, new_wins, losses)
+    
+    # Mag-refresh ang pahina kada 5 segundo (5000 milliseconds)
+    st_autorefresh(interval=5000, key="auto_sniper_refresh")
+
+# 5. Sidebar Controls
 st.sidebar.markdown("⚙️ **Bot Controls**")
 if st.sidebar.button("🗑️ I-reset Lahat (Reset All)"):
     update_bot_data("STOPPED", 500.00, 0.00, 0, 0)
@@ -75,16 +84,16 @@ else:
         update_bot_data("RUNNING (ACTIVE)", virtual_assets, saved_profit, wins, losses)
         st.rerun()
 
-if st.sidebar.button("🔄 I-simulate ang Paggalaw / Panalo"):
+if st.sidebar.button("🔄 I-simulate ang Paggalaw / Panalo (Manual)"):
     new_assets = virtual_assets + random.choice([15.0, 35.0, -10.0, 50.0])
     new_profit = saved_profit + random.choice([5.0, 12.0, 20.0])
     new_wins = wins + 1
     update_bot_data(bot_status, new_assets, new_profit, new_wins, losses)
     st.rerun()
 
-# 5. Main Dashboard Layout
-st.title("🚀 Sniper Bot - Live Mock Trading Dashboard (Cloud Synced)")
-st.markdown("Makikita rito ang paggalaw at pagbili ng mga coins ng bot sa real-time na naka-save sa Supabase Cloud.")
+# 6. Main Dashboard Layout
+st.title("🚀 Sniper Bot - Live Mock Trading Dashboard (Auto-Cloud Synced)")
+st.markdown("Kapag naka-**RUNNING**, kusa itong mag-a-update at mag-a-save sa Supabase Cloud bawat ilang segundo.")
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -102,7 +111,7 @@ with col4:
 
 st.markdown("---")
 
-# 6. Active Positions Mock View
+# 7. Active Positions Mock View
 st.subheader("📋 Active Positions (Biniling Coins ng Bot)")
 pos_col1, pos_col2, pos_col3, pos_col4 = st.columns(4)
 
