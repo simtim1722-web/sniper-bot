@@ -1,16 +1,17 @@
 import streamlit as st
 from supabase import create_client
 import random
+import requests
 from streamlit_autorefresh import st_autorefresh
 
 # 1. Page Configuration
 st.set_page_config(
-    page_title="Sniper Bot - Live Mock Trading Dashboard (Cloud Synced)",
+    page_title="Sniper Bot - Full Market Dashboard",
     page_icon="🚀",
     layout="wide"
 )
 
-# 2. Supabase Connection Setup
+# 2. Supabase Connection
 @st.cache_resource
 def init_connection():
     url = st.secrets["SUPABASE_URL"]
@@ -23,107 +24,69 @@ supabase = init_connection()
 def get_bot_data():
     try:
         response = supabase.table("bot_state").select("*").eq("id", 1).execute()
-        if response.data:
-            return response.data[0]
-    except Exception as e:
-        st.error(f"Database Error: {e}")
-    return {
-        "status": "STOPPED",
-        "virtual_assets": 500.00,
-        "saved_profit": 0.00,
-        "wins": 0,
-        "losses": 0
-    }
+        if response.data: return response.data[0]
+    except: pass
+    return {"status": "STOPPED", "virtual_assets": 500.00, "saved_profit": 0.00, "wins": 0, "losses": 0}
 
 def update_bot_data(status, virtual_assets, saved_profit, wins, losses):
     try:
         supabase.table("bot_state").update({
-            "status": status,
-            "virtual_assets": virtual_assets,
-            "saved_profit": saved_profit,
-            "wins": wins,
-            "losses": losses
+            "status": status, "virtual_assets": virtual_assets,
+            "saved_profit": saved_profit, "wins": wins, "losses": losses
         }).eq("id", 1).execute()
-    except Exception as e:
-        st.error(f"Update Error: {e}")
+    except: pass
 
-# Kunin ang data mula sa cloud
+# 4. Live Crypto Prices
+def get_live_crypto_prices():
+    symbols = [
+        'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'ADAUSDT', 'DOTUSDT', 'LINKUSDT', 'INJUSDT', 'APTUSDT',
+        'MATICUSDT', 'AVAXUSDT', 'TIAUSDT', 'NEARUSDT', 'ATOMUSDT', 'UNIUSDT', 'FILUSDT', 'ARBUSDT', 'OPUSDT', 'RENDERUSDT',
+        'ICPUSDT', 'LDOUSDT', 'FETUSDT', 'GALAUSDT', 'SANDUSDT', 'MANAUSDT', 'AXSUSDT', 'PEPEUSDT', 'SHIBUSDT', 'DOGEUSDT',
+        'WIFUSDT', 'BONKUSDT', 'FLOKIUSDT', 'SUIUSDT', 'PYTHUSDT'
+    ]
+    prices = {}
+    try:
+        for symbol in symbols:
+            res = requests.get(f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}", timeout=2).json()
+            if 'price' in res:
+                prices[symbol.replace('USDT', '')] = float(res['price'])
+    except: pass
+    return prices
+
+# Logic
 data = get_bot_data()
+live_prices = get_live_crypto_prices()
 bot_status = data["status"]
-virtual_assets = float(data["virtual_assets"])
-saved_profit = float(data["saved_profit"])
-wins = int(data["wins"])
-losses = int(data["losses"])
-total_trades = wins + losses
-win_rate = (wins / total_trades * 100) if total_trades > 0 else 0.0
 
-# 4. Auto-Refresh Logic (Magre-refresh bawat 5 segundo KUNG ang bot ay RUNNING)
 if bot_status == "RUNNING (ACTIVE)":
-    # Awtomatikong i-simulate ang trade bawat refresh para umandar ang mga numero
-    new_assets = virtual_assets + random.choice([5.0, 12.0, -3.0, 15.0])
-    new_profit = saved_profit + random.choice([2.0, 5.0, 8.0])
-    new_wins = wins + 1
-    update_bot_data(bot_status, new_assets, new_profit, new_wins, losses)
-    
-    # Mag-refresh ang pahina kada 5 segundo (5000 milliseconds)
-    st_autorefresh(interval=5000, key="auto_sniper_refresh")
+    st_autorefresh(interval=5000, key="auto_refresh")
 
-# 5. Sidebar Controls
-st.sidebar.markdown("⚙️ **Bot Controls**")
-if st.sidebar.button("🗑️ I-reset Lahat (Reset All)"):
-    update_bot_data("STOPPED", 500.00, 0.00, 0, 0)
-    st.rerun()
+# Dashboard Layout
+st.title("🚀 Sniper Bot - Full Market Dashboard")
 
-st.sidebar.markdown("---")
-if bot_status == "RUNNING (ACTIVE)":
-    if st.sidebar.button("⏹ Stop Bot"):
-        update_bot_data("STOPPED", virtual_assets, saved_profit, wins, losses)
-        st.rerun()
-else:
-    if st.sidebar.button("▶ Start Mock Bot"):
-        update_bot_data("RUNNING (ACTIVE)", virtual_assets, saved_profit, wins, losses)
-        st.rerun()
+# Controls
+col_ctrl1, col_ctrl2 = st.columns(2)
+with col_ctrl1:
+    if st.button("▶ Start Bot"): update_bot_data("RUNNING (ACTIVE)", data["virtual_assets"], data["saved_profit"], data["wins"], data["losses"])
+with col_ctrl2:
+    if st.button("⏹ Stop Bot"): update_bot_data("STOPPED", data["virtual_assets"], data["saved_profit"], data["wins"], data["losses"])
 
-if st.sidebar.button("🔄 I-simulate ang Paggalaw / Panalo (Manual)"):
-    new_assets = virtual_assets + random.choice([15.0, 35.0, -10.0, 50.0])
-    new_profit = saved_profit + random.choice([5.0, 12.0, 20.0])
-    new_wins = wins + 1
-    update_bot_data(bot_status, new_assets, new_profit, new_wins, losses)
-    st.rerun()
-
-# 6. Main Dashboard Layout
-st.title("🚀 Sniper Bot - Live Mock Trading Dashboard (Auto-Cloud Synced)")
-st.markdown("Kapag naka-**RUNNING**, kusa itong mag-a-update at mag-a-save sa Supabase Cloud bawat ilang segundo.")
-
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    st.metric(label="💰 Virtual Assets", value=f"${virtual_assets:,.2f}")
-
-with col2:
-    st.metric(label="📊 Win Rate", value=f"{win_rate:.2f}%", delta=f"{wins}W - {losses}L")
-
-with col3:
-    st.metric(label="🏦 Saved Profit", value=f"${saved_profit:,.2f}")
-
-with col4:
-    st.metric(label="⚡ Bot Status", value=bot_status)
+# Metrics
+c1, c2, c3 = st.columns(3)
+c1.metric("💰 Assets", f"${float(data['virtual_assets']):,.2f}")
+c2.metric("🏦 Profit", f"${float(data['saved_profit']):,.2f}")
+c3.metric("⚡ Status", bot_status)
 
 st.markdown("---")
+st.subheader("📋 Market Watch (Live)")
 
-# 7. Active Positions Mock View
-st.subheader("📋 Active Positions (Biniling Coins ng Bot)")
-pos_col1, pos_col2, pos_col3, pos_col4 = st.columns(4)
-
-with pos_col1:
-    st.markdown("**AXS**\n* Entry: $6.5\n* Current: $24.03\n* PnL: **+269.72%**")
-with pos_col2:
-    st.markdown("**GALA**\n* Entry: $0.024\n* Current: $0.09\n* PnL: **+260.9%**")
-with pos_col3:
-    st.markdown("**ATOM**\n* Entry: $8.1\n* Current: $30.03\n* PnL: **+270.8%**")
-with pos_col4:
-    st.markdown("**ETH**\n* Entry: $2600.0\n* Current: $9380.8\n* PnL: **+260.8%**")
+# Grid View for 35+ Coins
+coins_list = list(live_prices.keys())
+cols = st.columns(5) # 5 columns para hindi siksikan
+for i, coin in enumerate(coins_list):
+    price = live_prices[coin]
+    with cols[i % 5]:
+        st.info(f"**{coin}**: ${price:,.4f}")
 
 st.markdown("---")
-st.subheader("📜 Recent Trade History")
-st.info("Lahat ng galaw at trade history ay ligtas na naka-sync sa iyong Supabase database.")
+st.caption("Auto-updating every 5 seconds via Binance API & Supabase.")
