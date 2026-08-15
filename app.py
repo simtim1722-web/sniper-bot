@@ -2,10 +2,22 @@ import streamlit as st
 from supabase import create_client
 import requests
 from streamlit_autorefresh import st_autorefresh
+import time
+from datetime import timedelta
+
+# --- CONFIGURATION ---
+VERSION = "5.7.1"
+TIMEFRAME = '1m'
+WATCHLIST = [
+    "BTC", "ETH", "BNB", "SOL", "XRP", "ADA", "DOT", "LINK", "INJ", "APT",
+    "MATIC", "AVAX", "TIA", "NEAR", "ATOM", "UNI", "FIL", "ARB", "OP", "RENDER",
+    "ICP", "LDO", "FET", "GALA", "SAND", "MANA", "AXS", "PEPE", "SHIB", "DOGE",
+    "WIF", "BONK", "FLOKI", "SUI", "PYTH"
+]
 
 # 1. Page Configuration
 st.set_page_config(
-    page_title="Sniper Bot v5.7.1 Dashboard",
+    page_title=f"Sniper Bot v{VERSION} - Live Dashboard",
     page_icon="🚀",
     layout="wide"
 )
@@ -19,7 +31,7 @@ def init_connection():
 
 supabase = init_connection()
 
-# 3. Database Functions (Para sa State at Stats ng Bot)
+# 3. Database Functions
 def get_bot_data():
     try:
         response = supabase.table("bot_state").select("*").eq("id", 1).execute()
@@ -44,7 +56,7 @@ def update_bot_data(status, virtual_assets, saved_profit, wins, losses):
         }).eq("id", 1).execute()
     except: pass
 
-# 4. Kunin ang Tunay na Presyo mula sa CoinCap API para sa Active Positions
+# 4. Kunin ang Tunay na Presyo mula sa CoinCap API (Cloud-Friendly, Walang Geo-block)
 @st.cache_data(ttl=10)
 def get_real_coin_prices():
     active_coins = {
@@ -64,7 +76,6 @@ def get_real_coin_prices():
     except:
         pass
         
-    # Fallback kung sakaling magka-issue sa API
     fallback = {'AXS': 24.03, 'GALA': 0.09, 'ATOM': 30.03, 'ETH': 9380.8}
     for coin, entry in active_coins.items():
         if coin not in prices:
@@ -89,7 +100,7 @@ if bot_status == "RUNNING (ACTIVE)":
     st_autorefresh(interval=5000, key="auto_refresh")
 
 # --- UI LAYOUT ---
-st.title("🚀 Sniper Bot v5.7.1 - Live Dashboard")
+st.title(f"🚀 Sniper Bot v{VERSION} - Binance Testnet Compatible")
 
 # Bot Controls & Reset Button
 col_ctrl1, col_ctrl2, col_ctrl3 = st.columns(3)
@@ -106,7 +117,7 @@ with col_ctrl3:
         update_bot_data("STOPPED", 500.00, 0.00, 0, 0)
         st.rerun()
 
-# Metrics Dashboard (Assets, Profit, Win Rate, Trades, Status)
+# Metrics Dashboard
 c1, c2, c3, c4, c5 = st.columns(5)
 c1.metric("💰 Assets", f"${float(data['virtual_assets']):,.2f}")
 c2.metric("🏦 Saved Profit", f"${float(data['saved_profit']):,.2f}")
@@ -115,9 +126,8 @@ c4.metric("📈 Trades Breakdown", f"{wins}W - {losses}L")
 c5.metric("⚡ Status", bot_status)
 
 st.markdown("---")
-st.subheader("📋 Active Positions (RSI 30 + Binance Watchlist)")
+st.subheader("📋 Active Positions (RSI 30 + Binance Testnet Watchlist)")
 
-# Kunin ang active positions at ang kanilang live market prices
 active_entries, live_prices = get_real_coin_prices()
 
 cols = st.columns(4)
@@ -134,4 +144,4 @@ for i, (coin, entry_price) in enumerate(active_entries.items()):
         """)
 
 st.markdown("---")
-st.caption(f"Sniper Bot v5.7.1 | Timeframe: 1m | Watchlist: 35 Coins | Supabase & CoinCap Synced")
+st.caption(f"Sniper Bot v{VERSION} | Timeframe: {TIMEFRAME} | Watchlist: {len(WATCHLIST)} Coins | Supabase & Testnet Synced")
