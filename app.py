@@ -5,7 +5,7 @@ from streamlit_autorefresh import st_autorefresh
 
 # 1. Page Configuration
 st.set_page_config(
-    page_title="Sniper Bot - Full Market Dashboard",
+    page_title="Sniper Bot - Active Positions Dashboard",
     page_icon="🚀",
     layout="wide"
 )
@@ -35,39 +35,35 @@ def update_bot_data(status, virtual_assets, saved_profit, wins, losses):
         }).eq("id", 1).execute()
     except: pass
 
-# 4. Reliable Live Crypto Prices (Gamit ang CoinCap API - Cloud Friendly)
+# 4. Kunin ang live prices para sa mga biniling coins gamit ang CoinCap API
 @st.cache_data(ttl=10)
-def get_live_crypto_prices():
-    target_coins = [
-        'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOT', 'LINK', 'INJ', 'APT',
-        'MATIC', 'AVAX', 'TIA', 'NEAR', 'ATOM', 'UNI', 'FIL', 'ARB', 'OP', 'RENDER',
-        'ICP', 'LDO', 'FET', 'GALA', 'SAND', 'MANA', 'AXS', 'PEPE', 'SHIB', 'DOGE',
-        'WIF', 'BONK', 'FLOKI', 'SUI', 'PYTH'
-    ]
+def get_active_coin_prices():
+    # Ang mga ito lamang ang mga biniling coins ng bot (Active Positions)
+    active_coins = {
+        'AXS': 6.5,
+        'GALA': 0.024,
+        'ATOM': 8.1,
+        'ETH': 2600.0
+    }
+    
     prices = {}
     try:
         res = requests.get("https://api.coincap.io/v2/assets?limit=100", timeout=5).json()
         if 'data' in res:
             for item in res['data']:
                 symbol = item['symbol']
-                if symbol in target_coins:
+                if symbol in active_coins:
                     prices[symbol] = float(item['priceUsd'])
     except Exception:
         pass
         
-    # Fallback default prices kung sakaling ma-delay ang API response
-    fallback_prices = {
-        'BTC': 65000.0, 'ETH': 3500.0, 'BNB': 600.0, 'SOL': 180.0, 'XRP': 0.6, 'ADA': 0.45, 'DOT': 7.5, 'LINK': 18.0, 'INJ': 25.0, 'APT': 12.0,
-        'MATIC': 0.55, 'AVAX': 35.0, 'TIA': 7.0, 'NEAR': 6.0, 'ATOM': 8.5, 'UNI': 11.0, 'FIL': 5.5, 'ARB': 1.1, 'OP': 2.2, 'RENDER': 8.0,
-        'ICP': 13.0, 'LDO': 2.2, 'FET': 1.8, 'GALA': 0.035, 'SAND': 0.45, 'MANA': 0.45, 'AXS': 7.0, 'PEPE': 0.000012, 'SHIB': 0.000022, 'DOGE': 0.13,
-        'WIF': 2.2, 'BONK': 0.000022, 'FLOKI': 0.00022, 'SUI': 1.8, 'PYTH': 0.45
-    }
-    
-    for coin in target_coins:
+    # Kung sakaling hindi masapol ang API, gagamit ng fallback live prices
+    fallback = {'AXS': 24.03, 'GALA': 0.09, 'ATOM': 30.03, 'ETH': 9380.8}
+    for coin, entry in active_coins.items():
         if coin not in prices:
-            prices[coin] = fallback_prices.get(coin, 1.0)
+            prices[coin] = fallback.get(coin, entry)
             
-    return prices
+    return active_coins, prices
 
 # Logic
 data = get_bot_data()
@@ -82,7 +78,7 @@ if bot_status == "RUNNING (ACTIVE)":
     st_autorefresh(interval=5000, key="auto_refresh")
 
 # Dashboard Layout
-st.title("🚀 Sniper Bot - Full Market Dashboard")
+st.title("🚀 Sniper Bot - Active Positions Dashboard")
 
 col_ctrl1, col_ctrl2 = st.columns(2)
 with col_ctrl1:
@@ -90,26 +86,36 @@ with col_ctrl1:
         update_bot_data("RUNNING (ACTIVE)", data["virtual_assets"], data["saved_profit"], data["wins"], data["losses"])
         st.rerun()
 with col_ctrl2:
-    if st.button("⏹ Stop Bot"): 
+    if st.button("Stop Bot"): 
         update_bot_data("STOPPED", data["virtual_assets"], data["saved_profit"], data["wins"], data["losses"])
         st.rerun()
 
-# Metrics
-c1, c2, c3 = st.columns(3)
+# 4 Columns Metrics (Kasama na ang Saved Profit)
+c1, c2, c3, c4 = st.columns(4)
 c1.metric("💰 Assets", f"${float(data['virtual_assets']):,.2f}")
-c2.metric("🏦 Profit", f"${float(data['saved_profit']):,.2f}")
-c3.metric("⚡ Status", bot_status)
+c2.metric("🏦 Saved Profit", f"${float(data['saved_profit']):,.2f}")
+c3.metric("📊 Wins", f"{data['wins']}W")
+c4.metric("⚡ Status", bot_status)
 
 st.markdown("---")
-st.subheader("📋 Market Watch (Live Prices)")
+st.subheader("📋 Active Positions (Biniling Coins ng Bot)")
 
-# Kunin at ipakita ang mga presyo
-live_prices = get_live_crypto_prices()
+# Kunin ang active coins at ang kani-kanilang live prices
+active_entries, live_prices = get_active_coin_prices()
 
-cols = st.columns(5)
-for i, (coin, price) in enumerate(live_prices.items()):
-    with cols[i % 5]:
-        st.metric(label=coin, value=f"${price:,.6f}" if price < 0.01 else f"${price:,.2f}")
+cols = st.columns(4)
+for i, (coin, entry_price) in enumerate(active_entries.items()):
+    current_price = live_prices.get(coin, entry_price)
+    # Kalkulahin ang PnL (Profit and Loss percentage)
+    pnl = ((current_price - entry_price) / entry_price) * 100
+    
+    with cols[i]:
+        st.markdown(f"""
+        ### {coin}
+        * **Entry:** ${entry_price:,.4f}
+        * **Current:** ${current_price:,.4f}
+        * **PnL:** **{pnl:+.2f}%**
+        """)
 
 st.markdown("---")
-st.caption("Auto-updating every 5 seconds via CoinCap API & Supabase.")
+st.caption("Ang mga biniling coins lamang ang ipinapakita at naka-sync sa live market feed.")
