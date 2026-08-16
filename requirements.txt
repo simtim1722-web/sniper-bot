@@ -1,4 +1,5 @@
 streamlit
 supabase
-streamlit-autorefresh
 requests
+streamlit-autorefresh
+ccxt
