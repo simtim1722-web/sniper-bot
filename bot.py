@@ -8,20 +8,28 @@ from ta.trend import EMAIndicator
 from datetime import timedelta
 
 # --- CONFIGURATION ---
-VERSION = "5.7.1"
+VERSION = "5.7.1-TESTNET"
 
-# Babasahin nito ang API keys mula sa Render Environment Variables o gagamit ng fallback kung nasa local PC
+# Babasahin nito ang API keys at Testnet mode mula sa Render Environment Variables
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN', '')
 TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 BINANCE_API_KEY = os.environ.get('BINANCE_API_KEY', '')
 BINANCE_API_SECRET = os.environ.get('BINANCE_API_SECRET', '')
+USE_TESTNET = os.environ.get('BINANCE_TESTNET', 'false').lower() == 'true'
 
-# Initialize CCXT Binance exchange (gagamit ng keys kung meron, o public data kung wala)
+# Initialize CCXT Binance exchange na may Testnet support kung naka-on
 exchange = ccxt.binance({
     'apiKey': BINANCE_API_KEY,
     'secret': BINANCE_API_SECRET,
     'enableRateLimit': True
 })
+
+# Kung Testnet ang gagamitin, i-activate ang sandbox mode ng CCXT
+if USE_TESTNET:
+    exchange.set_sandbox_mode(True)
+    print("[*] MODE: Binance TESTNET (Fake Money)")
+else:
+    print("[*] MODE: Binance LIVE (Real Money)")
 
 FEE_RATE = 0.001
 TRADE_SIZE = 75.0
@@ -77,7 +85,7 @@ def send_telegram_msg(message):
     except: pass
 
 def run_bot():
-    print(f"[+] Sniper Bot {VERSION} (RSI 30 + Optimized Stats) Active...")
+    print(f"[+] Sniper Bot {VERSION} Active...")
     try:
         while True:
             to_sell = []
