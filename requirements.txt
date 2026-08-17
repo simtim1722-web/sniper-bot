@@ -1,5 +1,4 @@
-streamlit
-supabase
-requests
-streamlit-autorefresh
 ccxt
+pandas
+ta
+requests
